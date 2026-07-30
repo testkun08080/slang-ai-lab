@@ -58,7 +58,6 @@ export async function compileSlangSourceToTarget(
     }
 
     if (target === "glsl" || target === "hlsl" || target === "metal" || target === "spirv") {
-      const slangTarget = slangTargetFromCompileTarget(target);
       const compileEntry = async (entryPoint: string, stage: number) => {
         const fn =
           target === "glsl"
@@ -71,26 +70,42 @@ export async function compileSlangSourceToTarget(
         return fn(normalized, { entryPoint, stage });
       };
 
-      const vertexResult = await compileEntry("vertexMain", STAGE_VERTEX);
       const fragmentResult = await compileEntry("fragmentMain", STAGE_FRAGMENT);
-      const warnings = [...vertexResult.warnings, ...fragmentResult.warnings];
+      if (!hasVertex) {
+        return {
+          ...base,
+          status: "success",
+          fragmentOutput: fragmentResult.code,
+          warnings: fragmentResult.warnings,
+          errors: [],
+          timestamp: Date.now(),
+        };
+      }
 
+      const vertexResult = await compileEntry("vertexMain", STAGE_VERTEX);
       return {
         ...base,
         status: "success",
         vertexOutput: vertexResult.code,
         fragmentOutput: fragmentResult.code,
-        warnings,
+        warnings: [...vertexResult.warnings, ...fragmentResult.warnings],
         errors: [],
         timestamp: Date.now(),
       };
     }
 
     // Fallback: program compile for unknown future targets
-    const { code, warnings } = await compileSlangProgram(normalized, [
-      { name: "vertexMain", stage: STAGE_VERTEX },
-      { name: "fragmentMain", stage: STAGE_FRAGMENT },
-    ], { target: slangTargetFromCompileTarget(target) });
+    const entries = hasVertex
+      ? [
+          { name: "vertexMain", stage: STAGE_VERTEX },
+          { name: "fragmentMain", stage: STAGE_FRAGMENT },
+        ]
+      : [{ name: "fragmentMain", stage: STAGE_FRAGMENT }];
+    const { code, warnings } = await compileSlangProgram(
+      normalized,
+      entries,
+      { target: slangTargetFromCompileTarget(target) },
+    );
     return {
       ...base,
       status: "success",

@@ -33,7 +33,7 @@ npm run build
 
 - **TypeScript**: The project is fully typed. Do not disable type checking.
 - **Commits**: Use short, descriptive commit messages in the imperative mood (e.g. `fix shader compile error`).
-- **Shaders**: New Slang shader templates go in `app/lib/slang-templates.ts` (compiled in-browser to WGSL). Legacy GLSL templates in `app/lib/shader-templates.ts` must compile under WebGL 1.0 (GLSL ES 1.00).
+- **Shaders**: New Slang shader templates go in `app/lib/slang-templates.ts` (compiled in-browser to WGSL). Include attribution comments when a technique is inspired by a known public shader.
 - **Secrets**: Never commit API keys, even in examples or scripts. See [SECURITY.md](./SECURITY.md).
 - **UI**: Follow the design system defined in [DESIGN.md](./DESIGN.md). Do not introduce new accent colors or deviate from the established glass-dark visual language.
 - **No comments**: Prefer self-documenting code. Add a comment only when the *why* is non-obvious.

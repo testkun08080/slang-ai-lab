@@ -99,6 +99,7 @@ Style recipes (compose, adapt, and layer these):
 Composition rules: pick a deliberate limited palette; use aspect-corrected coords;
 animate at moderate speed (u_time * 0.2..0.5 for calm styles); layer at least 2-3 depth
 levels for richness. Reproduce the *feel* of the reference style, not a rough symbol of it.
+Do not reproduce named copyrighted Shadertoy / published shaders verbatim — invent original variations.
 
 ## RENDERING MODEL — choose the right stage(s) for the request
 Decide from the user's intent:

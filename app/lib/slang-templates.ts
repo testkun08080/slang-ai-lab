@@ -183,6 +183,12 @@ export const SLANG_PALETTE_FLOW: SlangTemplate = {
   description: "Cosine palette concentric rings",
   renderMode: "2d",
   slang: `// Slang — Palette Flow
+// Inspired by: kishimisu "An Introduction to Shader Art Coding"
+//              (https://www.shadertoy.com/view/mtyGWy)
+//            + Inigo Quilez cosine palettes
+//              (https://iquilezles.org/articles/palettes/)
+// Technique: cosine palette + fract(length) concentric rings with layered loop.
+// Original implementation inspired by the above, not a verbatim copy.
 // @param u_speed {type: "float", min: 0.1, max: 2.5, step: 0.05, value: 1.0, label: "Flow Speed"}
 // @param u_density {type: "float", min: 4.0, max: 16.0, step: 0.25, value: 8.0, label: "Ring Density"}
 // @param u_intensity {type: "float", min: 0.4, max: 2.2, step: 0.05, value: 1.2, label: "Glow Intensity"}

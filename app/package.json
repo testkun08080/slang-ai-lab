@@ -1,7 +1,16 @@
 {
   "name": "slang-ai-lab",
   "version": "0.1.0",
+  "description": "AI-powered Slang shader playground with in-browser compilation to WGSL/WebGPU",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/testkun08080/slang-ai-lab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/testkun08080/slang-ai-lab/issues"
+  },
+  "homepage": "https://github.com/testkun08080/slang-ai-lab#readme",
   "scripts": {
     "dev": "next dev --webpack --hostname 127.0.0.1",
     "build": "next build",
