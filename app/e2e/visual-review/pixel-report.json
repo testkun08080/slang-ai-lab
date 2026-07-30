@@ -1,0 +1,72 @@
+{
+  "defaultPaletteFlow": {
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "center": [
+        81,
+        125,
+        148,
+        255
+      ],
+      "luminance": 118,
+      "nonBlackOnCenterRow": 1280
+    }
+  },
+  "default2d": {
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "center": [
+        18,
+        126,
+        65,
+        255
+      ],
+      "luminance": 69.66666666666667,
+      "nonBlackOnCenterRow": 1280
+    }
+  },
+  "textureSample": {
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "center": [
+        250,
+        250,
+        250,
+        255
+      ],
+      "luminance": 250,
+      "nonBlackOnCenterRow": 1280
+    }
+  },
+  "default3d": {
+    "canvas": {
+      "width": 800,
+      "height": 600,
+      "center": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "luminance": 0,
+      "nonBlackOnCenterRow": 0
+    }
+  },
+  "legacyGlsl": {
+    "editorLabel": "GLSL code editor",
+    "canvas": {
+      "width": 1280,
+      "height": 720,
+      "center": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "luminance": 85
+    }
+  }
+}
