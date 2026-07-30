@@ -1,0 +1,16 @@
+dist
+node_modules
+.DS_Store
+.vercel
+.cursor/
+*.log
+
+# Environment variables — keep only the example file
+.env
+.env.*
+!.env.local.example
+!**/.env.local.example
+
+# Agent scratch state (see .claude/agents/*.md)
+.claude/agent-memory/
+.claude/worktrees/
