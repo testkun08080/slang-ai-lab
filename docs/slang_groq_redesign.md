@@ -1,6 +1,14 @@
 # Slang AI Lab — Slang × Groq リデザイン設計書
 
-> **方針：**
+> **Status: historical.** This document describes an earlier design (server-side
+> `slangc`, split vertex/fragment files, API-side compile). The **current**
+> implementation compiles Slang in the browser via `slang-wasm` and keeps a
+> single Slang source as the canonical artifact. Prefer [CLAUDE.md](../CLAUDE.md)
+> and [README.md](../README.md) for the live architecture.
+>
+> Kept for design rationale and prompt/contract notes that still apply.
+
+> **方針（当時）：**
 > - AIは Slang コードの生成のみに専念する（GLSL変換はAIに任せない）
 > - Slang → GLSL の変換は `slangc` CLI を `child_process` で呼び出して行う
 > - 頂点シェーダーとフラグメントシェーダーは別ファイルとして管理する

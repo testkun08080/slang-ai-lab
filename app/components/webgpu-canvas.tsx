@@ -313,6 +313,7 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
           uniformLayoutRef.current = layout
           uniformDataRef.current = new ArrayBuffer(layout.size)
 
+          uniformBufferRef.current?.destroy()
           const uniformBuffer = device!.createBuffer({
             size: layout.size,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,

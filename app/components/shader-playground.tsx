@@ -412,6 +412,9 @@ export function ShaderPlayground() {
   const [copiedVertex, setCopiedVertex] = useState(false);
   const [editorTab, setEditorTab] = useState<"fragment" | "vertex">("fragment");
   const [settings, setSettings] = useState<AISettings>(defaultSettings);
+  // Gate localStorage writes until the restore effect has finished, otherwise the
+  // empty initial state can wipe persisted settings (including the API key).
+  const [storageReady, setStorageReady] = useState(false);
   const canvasRef = useRef<ShaderCanvasHandle>(null);
   const chatRef = useRef<AIChatPanelHandle>(null);
   const lastCompiledSlangRef = useRef<string>("");
@@ -585,32 +588,37 @@ export function ShaderPlayground() {
         if (parsed && typeof parsed === "object") setAiShaderHistoryByProject(parsed);
       } catch { /* ignore */ }
     }
+    setStorageReady(true);
   }, []);
 
   useEffect(() => {
+    if (!storageReady) return;
     if (projects.length > 0) {
       const compactProjects = projects.map((p) => ({ ...p, textures: undefined }));
       localStorage.setItem("slang-ai-lab-projects", JSON.stringify(compactProjects));
     }
-  }, [projects]);
+  }, [projects, storageReady]);
 
   useEffect(() => {
+    if (!storageReady) return;
     try {
       localStorage.setItem("slang-ai-lab-project-textures", JSON.stringify(projectTextures));
     } catch {
       toast.warning("Storage is running low. Textures may be lost after reloading the page.", { duration: 6000 });
     }
-  }, [projectTextures]);
+  }, [projectTextures, storageReady]);
 
   useEffect(() => {
+    if (!storageReady) return;
     localStorage.setItem("slang-ai-lab-settings", JSON.stringify(settings));
-  }, [settings]);
+  }, [settings, storageReady]);
 
   useEffect(() => {
+    if (!storageReady) return;
     try {
       localStorage.setItem("slang-ai-lab-ai-shader-history", JSON.stringify(aiShaderHistoryByProject));
     } catch { /* quota */ }
-  }, [aiShaderHistoryByProject]);
+  }, [aiShaderHistoryByProject, storageReady]);
 
   useEffect(() => {
     const proj = projects.find((p) => p.id === currentProjectId);
@@ -1321,6 +1329,7 @@ export function ShaderPlayground() {
       return;
     }
     if (src === lastCompiledSlangRef.current) return;
+    let cancelled = false;
     const timer = setTimeout(async () => {
       try {
         // Safety net: repair any referenced-but-undeclared u_* uniforms so the
@@ -1331,12 +1340,14 @@ export function ShaderPlayground() {
           // Custom vertex stage: compile vertexMain + fragmentMain into one
           // WGSL module and drive the configured vertex count.
           const { code } = await compileSlangProgramToWgsl(normalized);
+          if (cancelled) return;
           lastCompiledSlangRef.current = src;
           setWgslCode(code);
           setWgslVertexEntry("vertexMain");
           setWgslVertexCount(parseVertexCountDirective(normalized));
         } else {
           const { code } = await compileSlangToWgsl(normalized);
+          if (cancelled) return;
           lastCompiledSlangRef.current = src;
           setWgslCode(code);
           setWgslVertexEntry(null);
@@ -1344,10 +1355,14 @@ export function ShaderPlayground() {
         }
         setSlangError(null);
       } catch (e) {
+        if (cancelled) return;
         setSlangError((e as Error).message);
       }
     }, 400);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [slangSource, isSlangProject, previewRenderMode, streamingCode]);
 
   // Compile Slang -> GLSL for 3D WebGL preview (hybrid until WebGPU 3D exists).
@@ -1361,12 +1376,14 @@ export function ShaderPlayground() {
       return;
     }
     if (src === lastCompiledSlang3dRef.current) return;
+    let cancelled = false;
     const timer = setTimeout(async () => {
       try {
         await Promise.all([
           compileSlangToGlsl(src, { entryPoint: "vertexMain", stage: STAGE_VERTEX }),
           compileSlangToGlsl(src, { entryPoint: "fragmentMain", stage: STAGE_FRAGMENT }),
         ]);
+        if (cancelled) return;
         lastCompiledSlang3dRef.current = src;
         // The real Slang -> GLSL output targets GLSL ES 3.x features WebGL1
         // rejects, so the WebGL preview renders each built-in template's own
@@ -1377,10 +1394,14 @@ export function ShaderPlayground() {
         setSlangGlslFragment(matched?.glsl ?? DEFAULT_SLANG_FRAGMENT_3D.glsl);
         setSlangError(null);
       } catch (e) {
+        if (cancelled) return;
         setSlangError((e as Error).message);
       }
     }, 400);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [slangSource, isSlangProject, previewRenderMode, streamingCode]);
 
   // Compile to the user-selected target for preview/export (Slang Playground-style).
