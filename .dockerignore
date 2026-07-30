@@ -1,0 +1,17 @@
+# Keep the build context small and reproducible.
+**/node_modules
+**/.next
+**/out
+**/build
+**/.git
+**/.github
+**/.env
+**/.env.*
+!**/.env.local.example
+**/npm-debug.log*
+**/*.log
+**/.DS_Store
+**/lighthouse-report
+docs
+*.md
+!app/README.md

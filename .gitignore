@@ -1,0 +1,13 @@
+dist
+node_modules
+.DS_Store
+.env
+.env.local
+.vercel
+.env*.local
+.cursor/
+*.log
+
+# Agent scratch state (see .claude/agents/*.md)
+.claude/agent-memory/
+.claude/worktrees/

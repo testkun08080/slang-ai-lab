@@ -1,0 +1,14 @@
+services:
+  slang-ai-lab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: slang-ai-lab
+    container_name: slang-ai-lab
+    ports:
+      - "3000:3000"
+    environment:
+      # Optional server-side default key. Users can also enter their own key in the UI.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      NODE_ENV: production
+    restart: unless-stopped

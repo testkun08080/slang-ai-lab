@@ -1,0 +1,19 @@
+{
+  "name": "Slang AI Lab",
+  "short_name": "Slang Lab",
+  "description": "AI-powered Slang shader playground with real-time WebGPU preview",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0d0b08",
+  "background_color": "#0d0b08",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
