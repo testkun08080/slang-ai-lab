@@ -11,13 +11,13 @@ Describe a visual effect in natural language — the AI writes Slang, the browse
 
 - **AI shader generation** — Powered by Groq (Llama). Supports multi-turn refinement.
 - **Slang-first workflow** — AI generates canonical [Slang](https://shader-slang.org) source; the in-browser Slang compiler (WebAssembly) compiles it to WGSL, GLSL, HLSL, Metal, or SPIR-V for preview and export.
-- **Real-time WebGPU preview** — 2D fragment shaders and 3D mesh shaders with orbit camera.
+- **Real-time WebGPU preview** — 2D fragment shaders (and custom vertex stages) on WebGPU.
+- **3D mesh preview** — Built-in cube/sphere or uploaded `.obj`; for Slang 3D templates the WebGL preview uses a hand-written GLSL ES 1.00 pair matched to the preset (edited Slang falls back to a lit cube until full WebGPU 3D lands).
 - **User-adjustable parameters** — AI annotates uniforms; sliders and color pickers appear automatically.
 - **Texture slots** — Upload up to 4 images as `iChannel0`–`iChannel3` for the shader to sample.
-- **3D mesh support** — Built-in cube and sphere, or upload your own `.obj` file.
 - **Chat history** — Conversations are saved per-project in the browser (`localStorage`).
 - **Project management** — Create, rename, duplicate, and delete shader projects.
-- **Export** — Copy GLSL code or download a PNG snapshot of the canvas.
+- **Export** — Copy compiled output (WGSL / GLSL / HLSL / …) or the Slang source, or download a PNG snapshot of the canvas.
 
 ---
 
@@ -25,7 +25,8 @@ Describe a visual effect in natural language — the AI writes Slang, the browse
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 18+ (CI and Docker use Node 22)
+- A [WebGPU](https://gpuweb.github.io/gpuweb/)-capable browser (Chrome or Edge recommended)
 - A [Groq](https://console.groq.com/keys) API key (free tier available)
 
 ### Setup
@@ -52,6 +53,8 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 > **No server key?** Leave `GROQ_API_KEY` blank. Users can paste their own key directly in the Settings panel — it is stored in the browser's `localStorage` only, and is forwarded per-request through this app's API route to Groq. It is never persisted server-side.
+
+> **Public multi-tenant deploys:** Do not expose a funded shared `GROQ_API_KEY` without a shared rate-limit store. See [SECURITY.md](./SECURITY.md).
 
 ### Docker
 
@@ -104,19 +107,24 @@ app/
 ├── components/
 │   ├── shader-playground.tsx          # Root state + layout
 │   ├── webgpu-canvas.tsx              # WebGPU rendering (Slang → WGSL)
-│   ├── shader-canvas.tsx              # WebGL rendering engine (legacy)
+│   ├── shader-canvas.tsx              # WebGL rendering engine (legacy GLSL / 3D hybrid)
 │   ├── ai-chat-panel.tsx              # AI prompt UI + chat history
-│   ├── code-editor.tsx                # GLSL code editor
+│   ├── code-editor.tsx                # Shader code editor
+│   ├── compiled-output-panel.tsx      # Compiled WGSL/GLSL/… display
 │   ├── history-panel.tsx              # Project list sidebar
 │   ├── settings-panel.tsx             # API key + model selector
 │   ├── texture-panel.tsx              # Texture slot management
+│   ├── template-gallery.tsx           # Slang preset gallery
 │   └── parameter-panel.tsx            # Auto-generated uniform controls
+├── public/slang/                      # Bundled slang-wasm (Apache-2.0 WITH LLVM-exception)
 └── lib/
     ├── types.ts                        # Shared TypeScript types
-    ├── shader-templates.ts             # Built-in shader presets
+    ├── slang-templates.ts              # Built-in Slang shader presets
     ├── slang-compiler.ts               # In-browser Slang → WGSL/GLSL/HLSL/…
+    ├── slang-normalize.ts              # Generated Slang normalization
+    ├── compile-to-target.ts            # Multi-target compile orchestration
     ├── parameter-parser.ts             # @param annotation parser
-    ├── texture-utils.ts                # Image loading + WebGL texture helpers
+    ├── texture-utils.ts                # Image loading + texture helpers
     ├── rate-limit.ts                   # IP-based request rate limiter
     └── utils.ts                        # General utilities
 ```
@@ -130,6 +138,7 @@ One-click deploy to Vercel:
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/testkun08080/slang-ai-lab)
 
 Set `GROQ_API_KEY` in the Vercel project environment variables if you want a server-side default key.
+For a public demo, prefer leaving it unset so each user supplies their own key (see [SECURITY.md](./SECURITY.md)).
 
 ---
 
@@ -153,7 +162,7 @@ cd app
 npm install
 npm run test:e2e:install   # first time only — downloads Chromium
 
-# Unit tests (slang-templates exports / presets)
+# Unit tests
 npm run test:unit
 
 # E2E tests (starts dev server automatically, or reuses one on :3000)
@@ -188,6 +197,12 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md). Please also read our
 To report a vulnerability, see [SECURITY.md](./SECURITY.md) — please do not open
 a public issue for security problems.
 
+## Third-party
+
+This project bundles the [Slang](https://github.com/shader-slang/slang) compiler as
+WebAssembly under `app/public/slang/` (Apache License 2.0 WITH LLVM-exception).
+See [NOTICE](./NOTICE) and [app/public/slang/LICENSE](./app/public/slang/LICENSE).
+
 ## License
 
-[MIT](./LICENSE)
+[MIT](./LICENSE) (application code). Third-party components retain their own licenses.

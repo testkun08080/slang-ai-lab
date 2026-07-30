@@ -75,7 +75,6 @@ app/
     ├── slang-compiler.ts               # slang-wasm のロードとコンパイル
     ├── slang-normalize.ts              # 生成された Slang の正規化・エントリ検出
     ├── slang-templates.ts              # Slang プリセット
-    ├── shader-templates.ts             # 旧 GLSL プリセット
     ├── compile-to-target.ts            # ターゲット別コンパイルの取りまとめ
     ├── wgsl-bindings.ts                # WGSL の uniform / binding レイアウト解析
     ├── webgpu-device.ts                # GPUDevice の取得・共有

@@ -370,6 +370,7 @@ export const AIChatPanel = forwardRef<AIChatPanelHandle, AIChatPanelProps>(funct
           pending: false,
         })
       }
+      return false
     } finally {
       if (abortControllerByProjectRef.current[requestProjectKey] === controller) {
         abortControllerByProjectRef.current[requestProjectKey] = null

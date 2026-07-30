@@ -27,7 +27,9 @@ You can expect an initial response within 7 days.
   Keys entered in the Settings panel live in the browser's `localStorage` and are
   forwarded per-request to the app's API route, which passes them to Groq only.
 - **Server default key** (`GROQ_API_KEY`): protected by an in-memory, per-IP rate
-  limit (`app/lib/rate-limit.ts`). For multi-instance deployments, replace it
-  with a shared store (e.g. Upstash Redis) before exposing a funded key.
+  limit (`app/lib/rate-limit.ts`). For multi-instance or public multi-tenant
+  deployments, do **not** expose a funded shared key unless you replace the limiter
+  with a shared store (e.g. Upstash Redis). Prefer leaving `GROQ_API_KEY` unset so
+  each user supplies their own key in Settings.
 - **Generated shaders** run entirely in the client's GPU sandbox (WebGPU/WebGL);
   they cannot access the DOM or network.
