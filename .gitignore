@@ -11,6 +11,5 @@ node_modules
 !.env.local.example
 !**/.env.local.example
 
-# Agent scratch state (see .claude/agents/*.md)
-.claude/agent-memory/
-.claude/worktrees/
+# Local AI / agent tooling (not for public OSS)
+.claude/
