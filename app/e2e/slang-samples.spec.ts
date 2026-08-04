@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  assertCompiledOutputSuccess,
   clearAppStorage,
   openProjectsPanel,
   openTemplateGallery,
@@ -25,6 +26,7 @@ test.describe("Slang sample data", () => {
   test("2D Slang compiles and renders in WebGPU preview", async ({ page }) => {
     await waitForSlangPreview(page, "2d");
     await expect(visibleTestId(page, "webgpu-canvas")).toBeVisible();
+    await assertCompiledOutputSuccess(page);
   });
 
   test("new 2D project is created as Slang", async ({ page }) => {
@@ -57,11 +59,25 @@ test.describe("Slang sample data", () => {
     await expect(editor).toHaveValue(/\[shader\("vertex"\)\]/);
     await expect(editor).toHaveValue(/SV_VertexID/);
     await expect(editor).toHaveValue(/@vertexCount/);
-    // Real Slang wasm compiles vertexMain + fragmentMain into one WGSL module
-    // and the WebGPU pipeline draws the procedural grid — verifies painted pixels.
+    // Real Slang wasm compiles vertexMain + fragmentMain into one WGSL module;
+    // FPS > 0 confirms the WebGPU pipeline is drawing the procedural grid.
     await waitForSlangPreview(page, "2d");
     await expect(visibleTestId(page, "webgpu-canvas")).toBeVisible();
   });
+
+  for (const { id, marker } of [
+    { id: "plasmaGlow", marker: /Plasma Glow/ },
+    { id: "hexGrid", marker: /Hex Grid/ },
+    { id: "fireFlame", marker: /Fire Flame/ },
+  ]) {
+    test(`2D sample ${id} compiles and runs without errors`, async ({ page }) => {
+      await openTemplateGallery(page);
+      await visibleTestId(page, `template-${id}`).click();
+      await expect(slangEditor(page)).toHaveValue(marker);
+      await expect(slangEditor(page)).toHaveValue(/\[shader\("fragment"\)\]/);
+      await waitForSlangPreview(page, "2d");
+    });
+  }
 
   test("new 3D project shows Slang with vertexMain and WebGL preview", async ({ page }) => {
     await openProjectsPanel(page);
@@ -90,6 +106,9 @@ test.describe("Slang sample data", () => {
     { id: "vertexDisplace3d", marker: /animated vertex displacement/ },
     { id: "fresnel3d", marker: /Fresnel rim glow/ },
     { id: "uvChecker3d", marker: /animated UV checker/ },
+    { id: "toonShade3d", marker: /Toon shading/ },
+    { id: "iridescent3d", marker: /Iridescent coating/ },
+    { id: "wireGrid3d", marker: /Wire grid overlay/ },
   ]) {
     test(`3D sample ${id} compiles via real Slang and renders`, async ({ page }) => {
       await openProjectsPanel(page);

@@ -159,6 +159,9 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
     const vertexDrawCountRef = useRef<number>(vertexCount)
     const placeholderRef = useRef<WebGPUTextureBinding | null>(null)
     const channelTexturesRef = useRef<Map<string, WebGPUTextureBinding>>(new Map())
+    // Bumped whenever GPU resources are invalidated so in-flight async work and
+    // the RAF loop can detect stale captures (avoids submit-after-destroy).
+    const resourceEpochRef = useRef(0)
 
     const rafRef = useRef<number>(0)
     const startTimeRef = useRef<number>(0)
@@ -278,10 +281,16 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
       return () => {
         disposed = true
         cancelAnimationFrame(rafRef.current)
+        // Drop draw refs before destroy so a late RAF / async resume cannot
+        // submit a command buffer that still references these resources.
+        resourceEpochRef.current += 1
+        pipelineRef.current = null
+        bindGroupRef.current = null
         destroyChannelTextures()
         placeholderRef.current?.texture.destroy()
         placeholderRef.current = null
         uniformBufferRef.current?.destroy()
+        uniformBufferRef.current = null
         contextRef.current?.unconfigure()
         offscreenRef.current?.destroy()
         offscreenRef.current = null
@@ -291,9 +300,6 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
         deviceRef.current = null
         contextRef.current = null
         ctx2dRef.current = null
-        pipelineRef.current = null
-        bindGroupRef.current = null
-        uniformBufferRef.current = null
         setDeviceReady(false)
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,6 +312,14 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
       let cancelled = false
 
       async function build() {
+        // Invalidate draw resources synchronously BEFORE destroying the uniform
+        // buffer. The RAF loop keeps running across rebuilds; if we destroy the
+        // buffer while the previous bind group still references it, the next
+        // submit raises "Buffer used in submit while destroyed".
+        const epoch = ++resourceEpochRef.current
+        bindGroupRef.current = null
+        pipelineRef.current = null
+
         try {
           device!.pushErrorScope('validation')
 
@@ -313,12 +327,15 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
           uniformLayoutRef.current = layout
           uniformDataRef.current = new ArrayBuffer(layout.size)
 
-          uniformBufferRef.current?.destroy()
+          const previousUniform = uniformBufferRef.current
           const uniformBuffer = device!.createBuffer({
+            label: 'slang-ai-lab-uniforms',
             size: layout.size,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
           })
           uniformBufferRef.current = uniformBuffer
+          // Destroy only after the bind group that referenced it was cleared.
+          previousUniform?.destroy()
 
           // When a custom vertex entry point is present it lives in the same
           // compiled module as the fragment stage (one Slang program -> one WGSL
@@ -331,13 +348,17 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
           const vertexEntry = useCustomVertex ? vertexEntryPoint!.trim() : 'vs_main'
 
           const info = await fragmentModule.getCompilationInfo()
+          if (cancelled || resourceEpochRef.current !== epoch) {
+            device!.popErrorScope()
+            return
+          }
           const errors = info.messages.filter((m) => m.type === 'error')
           if (errors.length > 0) {
             const msg = errors
               .map((m) => `WGSL ${m.lineNum}:${m.linePos} ${m.message}`)
               .join('\n')
             device!.popErrorScope()
-            if (!cancelled) reportError(msg)
+            if (!cancelled && resourceEpochRef.current === epoch) reportError(msg)
             return
           }
 
@@ -353,12 +374,12 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
           })
 
           const scopeError = await device!.popErrorScope()
+          if (cancelled || resourceEpochRef.current !== epoch) return
           if (scopeError) {
-            if (!cancelled) reportError(`WebGPU: ${scopeError.message}`)
+            reportError(`WebGPU: ${scopeError.message}`)
             return
           }
 
-          if (cancelled) return
           const parsed = parseWgslGroup0Bindings(wgslFragment)
           bindingsRef.current = parsed.length > 0 ? parsed : DEFAULT_BINDINGS
           pipelineRef.current = pipeline
@@ -366,13 +387,17 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
           bindGroupRef.current = null
           setPipelineGeneration((n) => n + 1)
         } catch (e) {
-          if (!cancelled) reportError((e as Error).message)
+          if (!cancelled && resourceEpochRef.current === epoch) reportError((e as Error).message)
         }
       }
 
       build()
       return () => {
         cancelled = true
+        // Invalidate any in-flight bind-group work that captured the old buffer.
+        resourceEpochRef.current += 1
+        bindGroupRef.current = null
+        pipelineRef.current = null
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [wgslFragment, vertexEntryPoint, deviceReady])
@@ -397,6 +422,7 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
       const parsedBindings = parseWgslGroup0Bindings(wgslFragment)
       const bindings = parsedBindings.length > 0 ? parsedBindings : bindingsRef.current
       const activePipeline = pipeline
+      const epoch = resourceEpochRef.current
 
       let cancelled = false
 
@@ -413,7 +439,11 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
         }
 
         const uploaded = await textureSlotToWebGPUTexture(device!, slot)
-        if (!cancelled) channelTexturesRef.current.set(channelId, uploaded)
+        if (!cancelled && resourceEpochRef.current === epoch) {
+          channelTexturesRef.current.set(channelId, uploaded)
+        } else {
+          uploaded.texture.destroy()
+        }
         return uploaded
       }
 
@@ -433,11 +463,26 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
               ? await resolveChannelTexture(channelId)
               : placeholder!
 
+            if (cancelled || resourceEpochRef.current !== epoch) {
+              device!.popErrorScope()
+              return
+            }
+
             if (binding.kind === 'texture') {
               entries.push({ binding: binding.binding, resource: channelBinding.view })
             } else {
               entries.push({ binding: binding.binding, resource: channelBinding.sampler })
             }
+          }
+
+          if (cancelled || resourceEpochRef.current !== epoch) {
+            device!.popErrorScope()
+            return
+          }
+          // Uniform buffer may have been replaced by a newer pipeline rebuild.
+          if (uniformBufferRef.current !== uniformBuffer) {
+            device!.popErrorScope()
+            return
           }
 
           const bindGroup = device!.createBindGroup({
@@ -446,16 +491,16 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
           })
 
           const scopeError = await device!.popErrorScope()
+          if (cancelled || resourceEpochRef.current !== epoch) return
           if (scopeError) {
-            if (!cancelled) reportError(`WebGPU: ${scopeError.message}`)
+            reportError(`WebGPU: ${scopeError.message}`)
             return
           }
 
-          if (cancelled) return
           bindGroupRef.current = bindGroup
           reportError(null)
         } catch (e) {
-          if (!cancelled) reportError((e as Error).message)
+          if (!cancelled && resourceEpochRef.current === epoch) reportError((e as Error).message)
         }
       }
 
@@ -595,6 +640,15 @@ export const WebGPUCanvas = forwardRef<WebGPUCanvasHandle, WebGPUCanvasProps>(
             { buffer: readbackBufferRef.current!, bytesPerRow },
             [canvas.width, canvas.height],
           )
+        }
+        // Skip submit if a rebuild/teardown invalidated resources after we
+        // captured locals (e.g. Strict Mode remount racing a late frame).
+        if (
+          bindGroupRef.current !== bindGroup ||
+          uniformBufferRef.current !== uniformBuffer ||
+          pipelineRef.current !== pipeline
+        ) {
+          return
         }
         device.queue.submit([encoder.finish()])
         if (!context && ctx2d) {

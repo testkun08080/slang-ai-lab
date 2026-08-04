@@ -45,28 +45,53 @@ export function slangEditor(page: Page) {
   return visibleTestId(page, "shader-code-editor");
 }
 
+/** Preview error overlays (Slang compile / WebGPU / WebGL link). */
+function previewErrorLocators(page: Page) {
+  const preError = page.locator("pre").filter({
+    hasText:
+      /SlangCompileError|compilation failed|WebGPU is not supported|minimum binding size|WebGPU:|ERROR:|invalid version|syntax error/i,
+  });
+  const shaderCanvasError = page.locator("p").filter({
+    hasText: /shader error|failed to create|failed to link|syntax error|invalid version/i,
+  });
+  return { preError, shaderCanvasError };
+}
+
+async function assertNoPreviewErrors(page: Page) {
+  const { preError, shaderCanvasError } = previewErrorLocators(page);
+  if (await preError.count()) {
+    throw new Error(`Preview error overlay: ${await preError.first().textContent()}`);
+  }
+  if (await shaderCanvasError.count()) {
+    throw new Error(`Preview error overlay: ${await shaderCanvasError.first().textContent()}`);
+  }
+}
+
+/** Parse the bottom-left HUD "N fps" value (0 if not yet shown). */
+async function readPreviewFps(page: Page): Promise<number> {
+  const hud = page.getByText(/\d+\s*fps/).filter({ visible: true });
+  if ((await hud.count()) === 0) return 0;
+  const text = (await hud.first().textContent()) ?? "";
+  const match = text.match(/(\d+)\s*fps/i);
+  return match ? Number(match[1]) : 0;
+}
+
+/**
+ * Wait until the Slang preview is compiling/running without error overlays.
+ *
+ * For 2D (WebGPU): Chrome's WebGPU swapchain is not readable via
+ * drawImage/getImageData — headed Metal and headless SwiftShader both return
+ * transparent zeros even while the compositor paints and FPS ticks. Treat a
+ * non-zero FPS HUD + visible non-zero canvas as proof the sample is running.
+ */
 export async function waitForSlangPreview(page: Page, mode: "2d" | "3d" = "2d") {
   const testId = mode === "2d" ? "webgpu-canvas" : "shader-canvas";
   const canvas = visibleTestId(page, testId);
   await canvas.waitFor({ state: "visible" });
   // Slang WASM compile + pipeline build (debounced ~400ms).
   await page.waitForTimeout(1_500);
-  const preError = page.locator("pre").filter({
-    hasText:
-      /SlangCompileError|compilation failed|WebGPU is not supported|minimum binding size|WebGPU:|ERROR:|invalid version|syntax error/i,
-  });
-  if (await preError.count()) {
-    const text = await preError.first().textContent();
-    throw new Error(`Preview error overlay: ${text}`);
-  }
+  await assertNoPreviewErrors(page);
 
-  const shaderCanvasError = page.locator("p").filter({
-    hasText: /shader error|failed to create|failed to link|syntax error|invalid version/i,
-  });
-  if (await shaderCanvasError.count()) {
-    const text = await shaderCanvasError.first().textContent();
-    throw new Error(`Preview error overlay: ${text}`);
-  }
   const size = await canvas.evaluate((el: HTMLCanvasElement) => ({
     width: el.width,
     height: el.height,
@@ -76,37 +101,47 @@ export async function waitForSlangPreview(page: Page, mode: "2d" | "3d" = "2d") 
   }
 
   if (mode === "2d") {
-    // Wait until the WebGPU canvas has actually been painted (any pixel with
-    // non-zero alpha on the center row). A freshly created canvas is fully
-    // transparent; the render pass clears to opaque black, so paint implies a
-    // completed frame. Software WebGPU (SwiftShader CI) can take a while for
-    // the first compile + frame, hence the generous timeout.
     await expect
       .poll(
-        () =>
-          canvas.evaluate((el: HTMLCanvasElement) => {
-            const readPixels = (src: CanvasRenderingContext2D, w: number, h: number) => {
-              const line = src.getImageData(0, Math.floor(h / 2), w, 1).data;
-              let painted = 0;
-              for (let i = 3; i < line.length; i += 4) if (line[i] > 0) painted++;
-              return painted;
-            };
-            try {
-              const direct = el.getContext("2d");
-              if (direct) return readPixels(direct, el.width, el.height);
-              const probe = document.createElement("canvas");
-              probe.width = el.width;
-              probe.height = el.height;
-              const ctx = probe.getContext("2d");
-              if (!ctx) return -1;
-              ctx.drawImage(el, 0, 0);
-              return readPixels(ctx, probe.width, probe.height);
-            } catch {
-              return -1;
-            }
-          }),
-        { timeout: 90_000, message: "WebGPU canvas was never painted" },
+        async () => {
+          await assertNoPreviewErrors(page);
+          return readPreviewFps(page);
+        },
+        {
+          timeout: 45_000,
+          message: "WebGPU preview never reported FPS > 0 (compile/run loop)",
+        },
       )
       .toBeGreaterThan(0);
   }
+}
+
+/** Open the Compiled output panel and assert successful WGSL (or target) output. */
+export async function assertCompiledOutputSuccess(page: Page) {
+  const title = page.getByText("Compiled output", { exact: true }).filter({ visible: true });
+  if (!(await title.first().isVisible().catch(() => false))) {
+    await page
+      .getByRole("button", { name: "Output" })
+      .filter({ visible: true })
+      .first()
+      .click();
+  }
+  await expect(title.first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/^Success$/i).filter({ visible: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  // Compiled WGSL/GLSL module body lives in a textarea inside the panel.
+  const outputEditor = page
+    .getByRole("textbox", { name: /code editor/i })
+    .filter({ visible: true })
+    .last();
+  await expect(outputEditor).toBeVisible();
+  await expect
+    .poll(async () => (await outputEditor.inputValue()).trim().length, {
+      timeout: 15_000,
+      message: "Compiled output panel stayed empty",
+    })
+    .toBeGreaterThan(20);
+  // Sanity: WGSL fragment entry or binding markers from the real Slang compiler.
+  await expect(outputEditor).toHaveValue(/@fragment|@binding|fn\s+fragmentMain/);
 }
