@@ -1,6 +1,8 @@
 import type { TextureSlot } from "./types";
 
 const MAX_TEXTURE_SIZE = 2048;
+/** Reject oversized uploads before they are decoded into memory. */
+const MAX_TEXTURE_FILE_BYTES = 20 * 1024 * 1024;
 const SUPPORTED_FORMATS = [
   "image/png",
   "image/jpeg",
@@ -40,6 +42,12 @@ export async function loadImageToBase64(file: File): Promise<{
   if (!SUPPORTED_FORMATS.includes(file.type)) {
     throw new Error(
       `Unsupported image format: ${file.type}. Supported formats: PNG, JPEG, WEBP, HEIC/HEIF, BMP, GIF`
+    );
+  }
+
+  if (file.size > MAX_TEXTURE_FILE_BYTES) {
+    throw new Error(
+      `Image is too large (${Math.round(file.size / 1024 / 1024)} MB). Maximum size is ${MAX_TEXTURE_FILE_BYTES / 1024 / 1024} MB.`
     );
   }
 

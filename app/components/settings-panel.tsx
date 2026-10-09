@@ -279,7 +279,7 @@ export function SettingsPanel({
             className="text-[10px]"
             style={{ color: "var(--muted-foreground)" }}
           >
-            API keys are stored locally and are never sent to external servers.
+            API keys are stored in this browser only and are sent only to this app&apos;s API, which forwards them to Groq.
           </p>
         </div>
       </DropdownMenuContent>

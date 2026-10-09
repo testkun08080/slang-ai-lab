@@ -1,6 +1,6 @@
 import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkGlobalRateLimit, checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeSlangSource } from "@/lib/slang-normalize";
 import { DEFAULT_AI_MODEL_ID } from "@/lib/types";
 
@@ -8,6 +8,10 @@ import { DEFAULT_AI_MODEL_ID } from "@/lib/types";
 // (e.g. "llama-3.3-70b-versatile", "moonshotai/kimi-k2-instruct").
 const VALID_MODEL_PATTERN = /^[\w./-]+$/;
 const MAX_MESSAGE_LENGTH = 8_000;
+// 24 history messages x 8k chars plus envelope fits comfortably; anything
+// larger is rejected before it is buffered and parsed.
+const MAX_BODY_BYTES = 512 * 1024;
+const MAX_API_KEY_LENGTH = 256;
 const MAX_TEXTURE_COUNT = 4;
 const MAX_HISTORY_MESSAGES = 24;
 // Texture slots are fixed to iChannel0..iChannel3; anything else is rejected
@@ -222,6 +226,26 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const declaredLength = Number(req.headers.get("content-length") ?? "0");
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request body too large." }, { status: 413 });
+    }
+    // content-length can be absent or lie (chunked uploads), so cap the real size too.
+    const rawBody = await req.text();
+    if (rawBody.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request body too large." }, { status: 413 });
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
     const {
       prompt,
       messages: rawMessages,
@@ -229,7 +253,7 @@ export async function POST(req: NextRequest) {
       apiKey,
       model = DEFAULT_AI_MODEL_ID,
       textures = [],
-    } = (await req.json()) as {
+    } = body as {
       prompt?: string;
       messages?: ChatMessage[];
       renderMode: "2d" | "3d";
@@ -238,7 +262,7 @@ export async function POST(req: NextRequest) {
       textures?: TextureInfo[];
     };
 
-    if (model && !VALID_MODEL_PATTERN.test(model)) {
+    if (typeof model !== "string" || !model || model.length > 100 || !VALID_MODEL_PATTERN.test(model)) {
       return NextResponse.json({ error: "Invalid model ID." }, { status: 400 });
     }
 
@@ -268,12 +292,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const key = (typeof apiKey === "string" && apiKey.trim()) || process.env.GROQ_API_KEY;
+    const userKey = typeof apiKey === "string" ? apiKey.trim() : "";
+    if (userKey.length > MAX_API_KEY_LENGTH) {
+      return NextResponse.json({ error: "Invalid API key." }, { status: 400 });
+    }
+    const key = userKey || process.env.GROQ_API_KEY;
     if (!key) {
       return NextResponse.json(
         { error: "Groq API key is required. Add it in Settings." },
         { status: 400 },
       );
+    }
+    // The shared server key gets an additional global budget: the per-IP limit
+    // alone can be sidestepped by rotating a spoofed X-Forwarded-For header.
+    if (!userKey) {
+      const global = checkGlobalRateLimit();
+      if (!global.ok) {
+        return NextResponse.json(
+          { error: `Server is busy. Please wait ${global.retryAfter}s before retrying.` },
+          { status: 429, headers: { "Retry-After": String(global.retryAfter) } },
+        );
+      }
     }
 
     let messages: ChatMessage[];

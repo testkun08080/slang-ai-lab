@@ -97,15 +97,12 @@ export class SlangCompileError extends Error {
 }
 
 /**
- * Dynamic import that hides the module URL from the bundler so it is fetched
- * at runtime from the public directory rather than being statically analyzed.
+ * Dynamic import of a same-origin runtime module. The bundler ignore hints keep
+ * the URL out of static analysis so it is fetched at runtime from `public/`.
+ * (No `new Function`/eval: that would force `unsafe-eval` into the CSP.)
  */
 function importRuntime(url: string): Promise<Record<string, unknown>> {
-  const dynamicImport = new Function(
-    "u",
-    "return import(u)",
-  ) as (u: string) => Promise<Record<string, unknown>>;
-  return dynamicImport(url);
+  return import(/* webpackIgnore: true */ /* turbopackIgnore: true */ url);
 }
 
 async function initModule(): Promise<SlangModuleInstance> {

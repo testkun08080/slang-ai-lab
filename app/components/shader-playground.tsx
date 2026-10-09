@@ -103,6 +103,8 @@ import type {
 
 const generateId = () => crypto.randomUUID();
 
+/** Reject oversized .obj uploads before reading them into memory. */
+const MAX_OBJ_FILE_BYTES = 20 * 1024 * 1024;
 const ENABLE_3D_PREVIEW = true;
 
 const DEFAULT_MESH_SOURCE: MeshSource = { kind: "preset", presetId: "cube" };
@@ -1131,6 +1133,13 @@ export function ShaderPlayground() {
     }
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_OBJ_FILE_BYTES) {
+      const message = `OBJ file is too large. Maximum size is ${MAX_OBJ_FILE_BYTES / 1024 / 1024} MB.`;
+      setMeshError(message);
+      toast.error(message);
+      e.target.value = "";
+      return;
+    }
     const text = await file.text();
     const parsed = parseObjToMeshData(text);
     if (!parsed.ok) {
