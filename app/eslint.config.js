@@ -1,13 +1,9 @@
-const { FlatCompat } = require('@eslint/eslintrc')
 const js = require('@eslint/js')
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-})
+const nextCoreWebVitals = require('eslint-config-next/core-web-vitals')
 
 module.exports = [
   js.configs.recommended,
-  ...compat.extends('next/core-web-vitals'),
+  ...(Array.isArray(nextCoreWebVitals) ? nextCoreWebVitals : [nextCoreWebVitals]),
   {
     ignores: ['**/.next/**', '**/node_modules/**', '**/out/**', '**/build/**', 'public/**'],
   },
@@ -17,6 +13,11 @@ module.exports = [
     rules: {
       'no-undef': 'off',
       'no-unused-vars': 'off',
+      // New React Compiler-oriented rules shipped with eslint-config-next 16.
+      // They flag pre-existing patterns (setState in effects, Date.now in render);
+      // keep them visible as warnings until the components are refactored.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/purity': 'warn',
     },
   },
 ]

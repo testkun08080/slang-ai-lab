@@ -31,5 +31,15 @@ You can expect an initial response within 7 days.
   deployments, do **not** expose a funded shared key unless you replace the limiter
   with a shared store (e.g. Upstash Redis). Prefer leaving `GROQ_API_KEY` unset so
   each user supplies their own key in Settings.
+- **Rate limiting & request limits**: `/api/generate-shader` and `/api/models` are limited per
+  client IP. Requests that use the server's `GROQ_API_KEY` additionally share a global
+  budget, and request bodies are capped at 512 KB. Because the limiter is in-memory and
+  trusts `X-Forwarded-For`, run the app behind a reverse proxy that overwrites that header.
+- **HTTP security headers**: `next.config.mjs` sets a Content-Security-Policy, `X-Frame-Options`,
+  `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` and HSTS. The CSP allows
+  `'unsafe-eval'` only because the bundled slang-wasm (Emscripten embind) needs `new Function`.
+- **Dependencies**: CI runs `npm audit --omit=dev` and fails on moderate or higher findings.
+  The only known remaining advisory is `braces` (dev-only, via the ESLint toolchain; no
+  patched release exists yet).
 - **Generated shaders** run entirely in the client's GPU sandbox (WebGPU/WebGL);
   they cannot access the DOM or network.

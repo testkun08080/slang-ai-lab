@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { DEFAULT_AI_MODELS, type AIModelOption } from "@/lib/types";
 
 function inferTier(modelId: string): AIModelOption["tier"] {
@@ -35,8 +36,24 @@ function shouldIncludeModel(modelId: string): boolean {
   return true;
 }
 
+const MAX_API_KEY_LENGTH = 256;
+
 export async function GET(req: NextRequest) {
-  const apiKey = req.headers.get("x-api-key") || process.env.GROQ_API_KEY;
+  // Each call can spend the server key (or a user key) on an upstream Groq
+  // request, so it shares the same per-IP limiter as /api/generate-shader.
+  const { ok, retryAfter } = checkRateLimit(getClientIp(req));
+  if (!ok) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Please wait ${retryAfter}s before retrying.` },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
+  }
+
+  const userKey = req.headers.get("x-api-key")?.trim() ?? "";
+  if (userKey.length > MAX_API_KEY_LENGTH) {
+    return NextResponse.json({ error: "Invalid API key." }, { status: 400 });
+  }
+  const apiKey = userKey || process.env.GROQ_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json({
